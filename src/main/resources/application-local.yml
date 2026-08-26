@@ -1,0 +1,6 @@
+aws:
+  access-key-id: test
+  secret-access-key: test
+  dynamodb:
+    endpoint: http://localhost:4566
+    table-name: franchise-management

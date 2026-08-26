@@ -40,10 +40,15 @@ Mockito
 
 ## Requisitos
 Spring Boot 4.1.1, Java 21 LTS, Maven 3.9.16.
-
-## Instalación
+Docker Desktop instalado y en ejecución.
+Aws CLI
 
 ## Ejecutar localmente
+Levantar localstack--> docker compose up -d
+Crear la Tabla de Prueba-->aws --endpoint-url=http://localhost:4566 dynamodb create-table --table-name franchise-management --attribute-definitions AttributeName=PK,AttributeType=S AttributeName=SK,AttributeType=S --key-schema AttributeName=PK,KeyType=HASH AttributeName=SK,KeyType=RANGE --billing-mode PAY_PER_REQUEST --region us-east-1 --profile localstack
+Para ver visualemte la tabla-->
+npx dynamodb-admin --dynamo-endpoint http://localhost:4566
+mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 ## Docker
 

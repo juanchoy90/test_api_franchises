@@ -4,3 +4,11 @@ spring:
 
 server:
   port: ${PORT:8080}
+
+aws:
+  access-key-id: ${AWS_ACCESS_KEY_ID:}
+  secret-access-key: ${AWS_SECRET_ACCESS_KEY:}
+  dynamodb:
+    endpoint: ${AWS_DYNAMODB_ENDPOINT:}
+    region: ${AWS_REGION:us-east-1}
+    table-name: ${DYNAMODB_TABLE_NAME:franchise-management}
