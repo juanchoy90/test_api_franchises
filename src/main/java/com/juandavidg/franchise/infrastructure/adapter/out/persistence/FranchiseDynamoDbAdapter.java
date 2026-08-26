@@ -3,6 +3,7 @@ package com.juandavidg.franchise.infrastructure.adapter.out.persistence;
 import com.juandavidg.franchise.domain.exception.DuplicateResourceException;
 import com.juandavidg.franchise.domain.model.Franchise;
 import com.juandavidg.franchise.domain.port.out.FranchiseRepositoryPort;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
@@ -17,6 +18,7 @@ import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledExcepti
 import java.util.Map;
 
 @Repository
+@Slf4j
 public class FranchiseDynamoDbAdapter implements FranchiseRepositoryPort {
 
     private static final String PREFIX_FRANCHISE = "FRANCHISE#";
@@ -35,6 +37,8 @@ public class FranchiseDynamoDbAdapter implements FranchiseRepositoryPort {
 
     @Override
     public Mono<Franchise> save(Franchise franchise) {
+        log.debug("Saving franchise item to DynamoDB, id={} nit={}", franchise.getId(), franchise.getNit());
+
         TransactWriteItemsRequest request = TransactWriteItemsRequest.builder()
                 .transactItems(
                         TransactWriteItem.builder().put(mainItem(franchise)).build(),
@@ -44,12 +48,16 @@ public class FranchiseDynamoDbAdapter implements FranchiseRepositoryPort {
 
         return Mono.fromFuture(() -> dynamoDbClient.transactWriteItems(request))
                 .thenReturn(franchise)
-                .onErrorMap(TransactionCanceledException.class, ex ->
-                        new DuplicateResourceException("Franchise", "nit", franchise.getNit()));
+                .onErrorMap(TransactionCanceledException.class, ex -> {
+                    log.warn("DynamoDB transaction cancelled, nit={} already exists", franchise.getNit());
+                    return new DuplicateResourceException("Franchise", "nit", franchise.getNit());
+                });
     }
 
     @Override
     public Mono<Boolean> existsByNit(String nit) {
+        log.debug("Checking existence of nit={} in DynamoDB", nit);
+
         GetItemRequest request = GetItemRequest.builder()
                 .tableName(tableName)
                 .key(Map.of(

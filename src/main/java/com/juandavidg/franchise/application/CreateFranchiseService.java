@@ -7,6 +7,7 @@ import com.juandavidg.franchise.domain.model.command.CreateFranchiseCommand;
 import com.juandavidg.franchise.domain.port.in.CreateFranchiseUseCase;
 import com.juandavidg.franchise.domain.port.out.FranchiseRepositoryPort;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -15,15 +16,19 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CreateFranchiseService implements CreateFranchiseUseCase {
 
     private final FranchiseRepositoryPort franchiseRepositoryPort;
 
     @Override
     public Mono<Franchise> execute(CreateFranchiseCommand command) {
+        log.info("Checking NIT uniqueness for nit={}", command.nit());
+
         return franchiseRepositoryPort.existsByNit(command.nit())
                 .flatMap(exists -> {
                     if (Boolean.TRUE.equals(exists)) {
+                        log.warn("Franchise creation rejected, nit={} already exists", command.nit());
                         return Mono.error(new DuplicateResourceException("Franchise", "nit", command.nit()));
                     }
                     Instant now = Instant.now();
@@ -38,7 +43,9 @@ public class CreateFranchiseService implements CreateFranchiseUseCase {
                             .createdAt(now)
                             .updatedAt(now)
                             .build();
+                    log.debug("Persisting new franchise id={} nit={}", franchise.getId(), franchise.getNit());
                     return franchiseRepositoryPort.save(franchise);
-                });
+                })
+                .doOnNext(franchise -> log.info("Franchise created successfully id={} nit={}", franchise.getId(), franchise.getNit()));
     }
 }

@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +30,7 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/api/v1/franchises")
 @RequiredArgsConstructor
+@Slf4j
 public class FranchiseController {
 
     public static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
@@ -59,12 +61,16 @@ public class FranchiseController {
             @RequestHeader(IDEMPOTENCY_HEADER) String idempotencyKey,
             @Valid @RequestBody CreateFranchiseRequest request) {
 
+        log.info("Received create franchise request for nit={}", request.nit());
+
         CreateFranchiseCommand command = new CreateFranchiseCommand(
                 request.name(), request.nit(), request.city(), request.country(), request.email());
 
         return createFranchiseUseCase.execute(command)
                 .map(franchise -> ResponseEntity
                         .status(HttpStatus.CREATED)
-                        .<FranchiseResponse>body(franchiseWebMapper.toResponse(franchise)));
+                        .<FranchiseResponse>body(franchiseWebMapper.toResponse(franchise)))
+                .doOnNext(response -> log.info("Franchise creation request completed with status={}", response.getStatusCode()))
+                .doOnError(ex -> log.error("Franchise creation request failed for nit={}", request.nit(), ex));
     }
 }
