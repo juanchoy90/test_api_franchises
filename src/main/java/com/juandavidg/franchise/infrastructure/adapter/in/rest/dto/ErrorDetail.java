@@ -1,4 +1,4 @@
-package com.juandavidg.franchise.infrastructure.adapter.in.web.dto;
+package com.juandavidg.franchise.infrastructure.adapter.in.rest.dto;
 
 public record ErrorDetail(
         String field,

@@ -1,6 +1,4 @@
-package com.juandavidg.franchise.infrastructure.adapter.in.web.dto;
-
-import java.time.Instant;
+package com.juandavidg.franchise.infrastructure.adapter.in.rest.dto;
 
 public record FranchiseResponse(
         String id,
@@ -10,6 +8,6 @@ public record FranchiseResponse(
         String country,
         String email,
         String status,
-        Instant createdAt,
-        Instant updatedAt
+        String createdAt,
+        String updatedAt
 ) {}

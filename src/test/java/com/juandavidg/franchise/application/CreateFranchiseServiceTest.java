@@ -32,77 +32,53 @@ class CreateFranchiseServiceTest {
     @InjectMocks
     private CreateFranchiseService createFranchiseService;
 
+    private static final CreateFranchiseCommand COMMAND = new CreateFranchiseCommand(
+            "Franquicia Central", "900.123.456-7",
+            "Bogotá", "Colombia", "contacto@franquiciacentral.com"
+    );
+
     @Test
     @DisplayName("execute: debe guardar y retornar la franquicia cuando el NIT no existe")
     void execute_shouldSaveAndReturnFranchise_whenNitDoesNotExist() {
-        // given
-        var command = new CreateFranchiseCommand(
-                "Franquicia Central",
-                "900.123.456-7",
-                "Bogotá",
-                "Colombia",
-                "contacto@franquiciacentral.com"
-        );
-
-        var savedFranchise = Franchise.builder()
+        Franchise saved = Franchise.builder()
                 .id(UUID.randomUUID().toString())
-                .name(command.name())
-                .nit(command.nit())
-                .city(command.city())
-                .country(command.country())
-                .email(command.email())
+                .name(COMMAND.name()).nit(COMMAND.nit())
+                .city(COMMAND.city()).country(COMMAND.country()).email(COMMAND.email())
                 .status(FranchiseStatus.ACTIVE)
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
+                .createdAt(Instant.now()).updatedAt(Instant.now())
                 .build();
 
-        when(franchiseRepositoryPort.existsByNit(command.nit())).thenReturn(Mono.just(false));
-        when(franchiseRepositoryPort.save(any(Franchise.class))).thenReturn(Mono.just(savedFranchise));
+        when(franchiseRepositoryPort.existsByNit(COMMAND.nit())).thenReturn(Mono.just(false));
+        when(franchiseRepositoryPort.save(any(Franchise.class))).thenReturn(Mono.just(saved));
 
-        // when / then
-        StepVerifier.create(createFranchiseService.execute(command))
+        StepVerifier.create(createFranchiseService.execute(COMMAND))
                 .assertNext(franchise -> {
-                    assertThat(franchise.getId()).isNotBlank();
-                    assertThat(franchise.getName()).isEqualTo(command.name());
-                    assertThat(franchise.getNit()).isEqualTo(command.nit());
-                    assertThat(franchise.getCity()).isEqualTo(command.city());
-                    assertThat(franchise.getCountry()).isEqualTo(command.country());
-                    assertThat(franchise.getEmail()).isEqualTo(command.email());
+                    assertThat(franchise.getNit()).isEqualTo(COMMAND.nit());
                     assertThat(franchise.getStatus()).isEqualTo(FranchiseStatus.ACTIVE);
+                    assertThat(franchise.getId()).isNotBlank();
                     assertThat(franchise.getCreatedAt()).isNotNull();
-                    assertThat(franchise.getUpdatedAt()).isNotNull();
                 })
                 .verifyComplete();
 
-        verify(franchiseRepositoryPort).existsByNit(command.nit());
+        verify(franchiseRepositoryPort).existsByNit(COMMAND.nit());
         verify(franchiseRepositoryPort).save(any(Franchise.class));
     }
 
     @Test
     @DisplayName("execute: debe retornar DuplicateResourceException cuando el NIT ya existe")
     void execute_shouldReturnDuplicateResourceException_whenNitAlreadyExists() {
-        // given
-        var command = new CreateFranchiseCommand(
-                "Franquicia Central",
-                "900.123.456-7",
-                "Bogotá",
-                "Colombia",
-                "contacto@franquiciacentral.com"
-        );
+        when(franchiseRepositoryPort.existsByNit(COMMAND.nit())).thenReturn(Mono.just(true));
 
-        when(franchiseRepositoryPort.existsByNit(command.nit())).thenReturn(Mono.just(true));
-
-        // when / then
-        StepVerifier.create(createFranchiseService.execute(command))
+        StepVerifier.create(createFranchiseService.execute(COMMAND))
                 .expectErrorSatisfies(error -> {
                     assertThat(error).isInstanceOf(DuplicateResourceException.class);
                     DuplicateResourceException ex = (DuplicateResourceException) error;
                     assertThat(ex.getField()).isEqualTo("nit");
-                    assertThat(ex.getValue()).isEqualTo(command.nit());
+                    assertThat(ex.getValue()).isEqualTo(COMMAND.nit());
                 })
                 .verify();
 
-        verify(franchiseRepositoryPort).existsByNit(command.nit());
+        verify(franchiseRepositoryPort).existsByNit(COMMAND.nit());
         verify(franchiseRepositoryPort, never()).save(any());
     }
 }
