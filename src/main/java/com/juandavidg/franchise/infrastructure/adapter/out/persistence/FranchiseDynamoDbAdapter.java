@@ -71,6 +71,23 @@ public class FranchiseDynamoDbAdapter implements FranchiseRepositoryPort {
                 .map(response -> response.hasItem() && !response.item().isEmpty());
     }
 
+    @Override
+    public Mono<Boolean> existsById(String id) {
+        log.debug("Checking existence of franchise id={} in DynamoDB", id);
+
+        GetItemRequest request = GetItemRequest.builder()
+                .tableName(tableName)
+                .key(Map.of(
+                        "PK", s(PREFIX_FRANCHISE + id),
+                        "SK", s(SK_METADATA)
+                ))
+                .projectionExpression("PK")
+                .build();
+
+        return Mono.fromFuture(() -> dynamoDbClient.getItem(request))
+                .map(response -> response.hasItem() && !response.item().isEmpty());
+    }
+
     private Put mainItem(Franchise franchise) {
         return Put.builder()
                 .tableName(tableName)

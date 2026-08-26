@@ -30,3 +30,33 @@
   - Nunca exponer una entidad de dominio directo en un controller — la capa web solo conoce DTOs
   - El dominio nunca retorna null como valor valido —  Mono.empty()/Flux.empty() (reactivo), segun el contexto.
   - Un caso de uso = una interfaz (domain/port/in/) + una clase de implementacion (application/) — no consolidar multiples operaciones en una sola interfaz tipo CRUD generico.
+  - Usar SpringDoc OpenAPI para Documentación Swagger
+  - Usar Sl4j para logs en controladores servicios adaptadores.
+
+## Modelo de datos
+Vamos a implementar la aplicación utilizando DynamoDB con Single Table Design. Nombre de la tabla "franchise-management"
+
+1. Estructura general
+
+Utilizaremos una única tabla de DynamoDB.
+
+Las entidades principales serán:
+
+Franchise
+Store
+Product
+
+
+PK                    | SK                                  | tipo
+FRANCHISE#{id}         | METADATA                            | Franchise
+FRANCHISE#{id}         | STORE#{id}                          | Store
+FRANCHISE#{id}         | STORE#{id}#PRODUCT#{id}             | Product
+
+La jerarquía lógica del dominio es:
+
+Franchise
+   └── Store
+         └── Product
+
+
+ 

@@ -1,6 +1,7 @@
 package com.juandavidg.franchise.infrastructure.adapter.in.rest.exception;
 
 import com.juandavidg.franchise.domain.exception.DuplicateResourceException;
+import com.juandavidg.franchise.domain.exception.ResourceNotFoundException;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.FranchiseController;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.ErrorDetail;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.ErrorResponse;
@@ -43,6 +44,14 @@ public class GlobalExceptionHandler {
         log.warn("Duplicate resource: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(
                 409, "DUPLICATE_RESOURCE", ex.getMessage(), Instant.now(), errors));
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFound(ResourceNotFoundException ex) {
+        List<ErrorDetail> errors = List.of(new ErrorDetail(ex.getField(), ex.getMessage()));
+        log.warn("Referenced resource not found: {}", ex.getMessage());
+        return ResponseEntity.badRequest().body(new ErrorResponse(
+                400, "REFERENCED_RESOURCE_NOT_FOUND", ex.getMessage(), Instant.now(), errors));
     }
 
     @ExceptionHandler(ServerWebInputException.class)
