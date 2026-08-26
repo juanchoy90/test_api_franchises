@@ -8,4 +8,6 @@ public interface FranchiseRepositoryPort {
     Mono<Franchise> save(Franchise franchise);
 
     Mono<Boolean> existsByNit(String nit);
+
+    Mono<Boolean> existsById(String id);
 }
