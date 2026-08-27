@@ -1,6 +1,7 @@
 package com.juandavidg.franchise.infrastructure.adapter.in.rest.exception;
 
 import com.juandavidg.franchise.domain.exception.DuplicateResourceException;
+import com.juandavidg.franchise.domain.exception.ProductNotFoundException;
 import com.juandavidg.franchise.domain.exception.ResourceNotFoundException;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.FranchiseController;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.ErrorDetail;
@@ -52,6 +53,14 @@ public class GlobalExceptionHandler {
         log.warn("Referenced resource not found: {}", ex.getMessage());
         return ResponseEntity.badRequest().body(new ErrorResponse(
                 400, "REFERENCED_RESOURCE_NOT_FOUND", ex.getMessage(), Instant.now(), errors));
+    }
+
+    @ExceptionHandler(ProductNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleProductNotFound(ProductNotFoundException ex) {
+        List<ErrorDetail> errors = List.of(new ErrorDetail("productId", ex.getMessage()));
+        log.warn("Product not found: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(
+                404, "PRODUCT_NOT_FOUND", ex.getMessage(), Instant.now(), errors));
     }
 
     @ExceptionHandler(ServerWebInputException.class)
