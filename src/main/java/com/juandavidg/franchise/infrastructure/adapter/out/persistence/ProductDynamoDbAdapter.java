@@ -1,5 +1,6 @@
 package com.juandavidg.franchise.infrastructure.adapter.out.persistence;
 
+import com.juandavidg.franchise.domain.exception.ProductNotFoundException;
 import com.juandavidg.franchise.domain.model.Product;
 import com.juandavidg.franchise.domain.port.out.ProductRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +9,8 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
+import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 
 import java.util.Map;
@@ -57,6 +60,25 @@ public class ProductDynamoDbAdapter implements ProductRepositoryPort {
 
         return Mono.fromFuture(() -> dynamoDbClient.putItem(request))
                 .thenReturn(product);
+    }
+
+    @Override
+    public Mono<Void> deleteById(String franchiseId, String storeId, String productId) {
+        log.debug("Deleting product item from DynamoDB, id={} storeId={}", productId, storeId);
+
+        DeleteItemRequest request = DeleteItemRequest.builder()
+                .tableName(tableName)
+                .key(Map.of(
+                        "PK", s(PREFIX_FRANCHISE + franchiseId),
+                        "SK", s(PREFIX_STORE + storeId + INFIX_PRODUCT + productId)
+                ))
+                .conditionExpression("attribute_exists(PK)")
+                .build();
+
+        return Mono.fromFuture(() -> dynamoDbClient.deleteItem(request))
+                .then()
+                .onErrorMap(ConditionalCheckFailedException.class,
+                        ex -> new ProductNotFoundException(storeId, productId));
     }
 
     private static AttributeValue s(String value) {

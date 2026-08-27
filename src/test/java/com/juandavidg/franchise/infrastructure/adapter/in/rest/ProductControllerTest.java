@@ -1,9 +1,11 @@
 package com.juandavidg.franchise.infrastructure.adapter.in.rest;
 
+import com.juandavidg.franchise.domain.exception.ProductNotFoundException;
 import com.juandavidg.franchise.domain.exception.ResourceNotFoundException;
 import com.juandavidg.franchise.domain.model.Product;
 import com.juandavidg.franchise.domain.model.ProductStatus;
 import com.juandavidg.franchise.domain.port.in.CreateProductUseCase;
+import com.juandavidg.franchise.domain.port.in.DeleteProductUseCase;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.ProductResponse;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.exception.GlobalExceptionHandler;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.mapper.ProductWebMapper;
@@ -30,6 +32,9 @@ class ProductControllerTest {
     private CreateProductUseCase createProductUseCase;
 
     @Mock
+    private DeleteProductUseCase deleteProductUseCase;
+
+    @Mock
     private ProductWebMapper productWebMapper;
 
     private WebTestClient webTestClient;
@@ -41,7 +46,7 @@ class ProductControllerTest {
 
     @BeforeEach
     void setUp() {
-        ProductController controller = new ProductController(createProductUseCase, productWebMapper);
+        ProductController controller = new ProductController(createProductUseCase, deleteProductUseCase, productWebMapper);
 
         webTestClient = WebTestClient.bindToController(controller)
                 .controllerAdvice(new GlobalExceptionHandler())
@@ -137,5 +142,46 @@ class ProductControllerTest {
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("REFERENCED_RESOURCE_NOT_FOUND")
                 .jsonPath("$.errors[0].field").isEqualTo("storeId");
+    }
+
+    @Test
+    @DisplayName("DELETE → 204 cuando el producto y la tienda existen")
+    void delete_shouldReturn204_whenProductAndStoreExist() {
+        when(deleteProductUseCase.execute(any())).thenReturn(Mono.empty());
+
+        webTestClient.delete()
+                .uri(uriBuilder -> uriBuilder.path(URL + "/{productId}")
+                        .queryParam("storeId", "store_789xyz")
+                        .build("prod_987654321"))
+                .exchange()
+                .expectStatus().isNoContent();
+    }
+
+    @Test
+    @DisplayName("DELETE → 404 cuando el producto no existe en la tienda")
+    void delete_shouldReturn404_whenProductDoesNotExist() {
+        when(deleteProductUseCase.execute(any()))
+                .thenReturn(Mono.error(new ProductNotFoundException("store_789xyz", "prod_999")));
+
+        webTestClient.delete()
+                .uri(uriBuilder -> uriBuilder.path(URL + "/{productId}")
+                        .queryParam("storeId", "store_789xyz")
+                        .build("prod_999"))
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("PRODUCT_NOT_FOUND")
+                .jsonPath("$.errors[0].field").isEqualTo("productId");
+    }
+
+    @Test
+    @DisplayName("DELETE → 400 cuando falta el query param storeId")
+    void delete_shouldReturn400_whenStoreIdQueryParamIsMissing() {
+        webTestClient.delete()
+                .uri(URL + "/prod_987654321")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("MISSING_INPUT");
     }
 }

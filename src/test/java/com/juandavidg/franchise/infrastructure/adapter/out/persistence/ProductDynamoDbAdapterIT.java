@@ -129,6 +129,36 @@ class ProductDynamoDbAdapterIT {
         assertThat(item.get("metadata").m().get("category").s()).isEqualTo("Apparel");
     }
 
+    @Test
+    @DisplayName("deleteById: debe eliminar físicamente el ítem del producto")
+    void deleteById_shouldRemoveProductItem() {
+        Product product = buildProduct("prod_002", "store_789xyz", "fran_123");
+        StepVerifier.create(adapter.save(product)).expectNextCount(1).verifyComplete();
+
+        StepVerifier.create(adapter.deleteById("fran_123", "store_789xyz", "prod_002"))
+                .verifyComplete();
+
+        Map<String, AttributeValue> item = client.getItem(GetItemRequest.builder()
+                        .tableName(TABLE)
+                        .key(Map.of(
+                                "PK", AttributeValue.fromS("FRANCHISE#fran_123"),
+                                "SK", AttributeValue.fromS("STORE#store_789xyz#PRODUCT#prod_002")
+                        ))
+                        .build())
+                .join()
+                .item();
+
+        assertThat(item).isEmpty();
+    }
+
+    @Test
+    @DisplayName("deleteById: debe fallar con ProductNotFoundException cuando el producto no existe")
+    void deleteById_shouldFailWithProductNotFoundException_whenProductDoesNotExist() {
+        StepVerifier.create(adapter.deleteById("fran_123", "store_789xyz", "prod_does_not_exist"))
+                .expectError(com.juandavidg.franchise.domain.exception.ProductNotFoundException.class)
+                .verify();
+    }
+
     private Product buildProduct(String id, String storeId, String franchiseId) {
         Instant now = Instant.now();
         return Product.builder()
