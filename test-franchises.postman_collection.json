@@ -1,0 +1,212 @@
+{
+  "info": {
+    "_postman_id": "739465b5-8c69-4973-a5b6-bfdf927ab7b7",
+    "name": "test-franchises",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "53836656",
+    "_collection_link": "https://go.postman.co/collection/53836656-739465b5-8c69-4973-a5b6-bfdf927ab7b7?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "Create franchise",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Idempotency-Key",
+            "value": "654t54g456456"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"name\": \"Franquicia Test2\",\r\n    \"nit\": \"900.123.456-4\",\r\n    \"city\": \"Bogotá\",\r\n    \"country\": \"Colombia\",\r\n    \"email\": \"contacto@framercl.com\"\r\n  }",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "18.206.162.148:8080/api/v1/franchises",
+          "host": [
+            "18",
+            "206",
+            "162",
+            "148"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "franchises"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create store",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"franchiseId\": \"ffc3fc6d-3165-4e29-8e69-f90b3bfe1f9c\",\r\n    \"name\": \"Sucursal olimpica\",\r\n    \"address\": \"Cra 7 # 45-12\",\r\n    \"city\": \"Bogota\",\r\n    \"phone\": \"6011234567\"\r\n  }",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "18.206.162.148:8080/api/v1/stores",
+          "host": [
+            "18",
+            "206",
+            "162",
+            "148"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "stores"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create product",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"storeId\": \"b7c7d4e6-a97f-45db-952f-25d2662084a4\",\r\n    \"name\": \"Camiseta Deportiva roja\",\r\n    \"code\": \"CAM-ROJ-L-01\",\r\n    \"price\": 29.99,\r\n    \"description\": \"Camiseta para correr transpirable talla M\",\r\n    \"category\": \"Apparel\",\r\n    \"stock\": 89\r\n  }",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "18.206.162.148:8080/api/v1/products",
+          "host": [
+            "18",
+            "206",
+            "162",
+            "148"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "products"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Delete product",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "18.206.162.148:8080/api/v1/products/072d4a16-1a54-466b-a5f4-a990926a7201?storeId=4a0eca31-95c0-4cea-8d7a-ebb815deedd0",
+          "host": [
+            "18",
+            "206",
+            "162",
+            "148"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "products",
+            "072d4a16-1a54-466b-a5f4-a990926a7201"
+          ],
+          "query": [
+            {
+              "key": "storeId",
+              "value": "4a0eca31-95c0-4cea-8d7a-ebb815deedd0"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Change stock product",
+      "request": {
+        "method": "PATCH",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"quantity\": -50\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "18.206.162.148:8080/api/v1/products/29709efe-afe2-494d-b0d2-03d7af6450a8/stock?storeId=4a0eca31-95c0-4cea-8d7a-ebb815deedd0",
+          "host": [
+            "18",
+            "206",
+            "162",
+            "148"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "products",
+            "29709efe-afe2-494d-b0d2-03d7af6450a8",
+            "stock"
+          ],
+          "query": [
+            {
+              "key": "storeId",
+              "value": "4a0eca31-95c0-4cea-8d7a-ebb815deedd0"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "top-product-by-franchise",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "18.206.162.148:8080/api/v1/products/top-stock?franchiseId=ffc3fc6d-3165-4e29-8e69-f90b3bfe1f9c",
+          "host": [
+            "18",
+            "206",
+            "162",
+            "148"
+          ],
+          "port": "8080",
+          "path": [
+            "api",
+            "v1",
+            "products",
+            "top-stock"
+          ],
+          "query": [
+            {
+              "key": "franchiseId",
+              "value": "ffc3fc6d-3165-4e29-8e69-f90b3bfe1f9c"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
