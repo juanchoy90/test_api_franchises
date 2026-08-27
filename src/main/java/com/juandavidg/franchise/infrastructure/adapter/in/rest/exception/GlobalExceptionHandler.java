@@ -1,6 +1,7 @@
 package com.juandavidg.franchise.infrastructure.adapter.in.rest.exception;
 
 import com.juandavidg.franchise.domain.exception.DuplicateResourceException;
+import com.juandavidg.franchise.domain.exception.FranchiseNotFoundException;
 import com.juandavidg.franchise.domain.exception.InsufficientStockException;
 import com.juandavidg.franchise.domain.exception.ProductNotFoundException;
 import com.juandavidg.franchise.domain.exception.ResourceNotFoundException;
@@ -62,6 +63,14 @@ public class GlobalExceptionHandler {
         log.warn("Insufficient stock: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(
                 409, "INSUFFICIENT_STOCK", ex.getMessage(), Instant.now(), errors));
+    }
+
+    @ExceptionHandler(FranchiseNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleFranchiseNotFound(FranchiseNotFoundException ex) {
+        List<ErrorDetail> errors = List.of(new ErrorDetail("franchiseId", ex.getMessage()));
+        log.warn("Franchise not found: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(
+                404, "FRANCHISE_NOT_FOUND", ex.getMessage(), Instant.now(), errors));
     }
 
     @ExceptionHandler(ProductNotFoundException.class)

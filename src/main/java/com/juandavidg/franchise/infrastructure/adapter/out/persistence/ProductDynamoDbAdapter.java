@@ -8,6 +8,7 @@ import com.juandavidg.franchise.domain.port.out.ProductRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -15,6 +16,8 @@ import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedExce
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest;
+import software.amazon.awssdk.services.dynamodb.model.QueryResponse;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
@@ -114,6 +117,26 @@ public class ProductDynamoDbAdapter implements ProductRepositoryPort {
                 .map(response -> toDomain(response.attributes()))
                 .onErrorResume(ConditionalCheckFailedException.class,
                         ex -> resolveUpdateStockFailure(key, storeId, productId, quantity));
+    }
+
+    @Override
+    public Flux<Product> findAllByFranchiseId(String franchiseId) {
+        log.debug("Querying all products for franchiseId={}", franchiseId);
+
+        QueryRequest request = QueryRequest.builder()
+                .tableName(tableName)
+                .keyConditionExpression("PK = :pk AND begins_with(SK, :storePrefix)")
+                .filterExpression("entityType = :productType")
+                .expressionAttributeValues(Map.of(
+                        ":pk",          s(PREFIX_FRANCHISE + franchiseId),
+                        ":storePrefix", s(PREFIX_STORE),
+                        ":productType", s("PRODUCT")
+                ))
+                .build();
+
+        return Flux.from(dynamoDbClient.queryPaginator(request))
+                .flatMapIterable(QueryResponse::items)
+                .map(this::toDomain);
     }
 
     private Mono<Product> resolveUpdateStockFailure(Map<String, AttributeValue> key, String storeId,

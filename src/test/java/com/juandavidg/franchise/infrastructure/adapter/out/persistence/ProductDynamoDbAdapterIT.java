@@ -27,6 +27,7 @@ import software.amazon.awssdk.services.dynamodb.model.DeleteRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
@@ -226,6 +227,46 @@ class ProductDynamoDbAdapterIT {
                 .item();
 
         assertThat(item.get("stock").n()).isEqualTo("30");
+    }
+
+    @Test
+    @DisplayName("findAllByFranchiseId: debe retornar solo los productos de la franquicia, excluyendo METADATA y items de tienda")
+    void findAllByFranchiseId_shouldReturnOnlyProductItems() {
+        // Item de franquicia (SK=METADATA) y de tienda (SK=STORE#{id}) insertados directamente,
+        // para comprobar que la Query los excluye (begins_with + filterExpression entityType=PRODUCT).
+        client.putItem(PutItemRequest.builder()
+                .tableName(TABLE)
+                .item(Map.of(
+                        "PK", AttributeValue.fromS("FRANCHISE#fran_topstock"),
+                        "SK", AttributeValue.fromS("METADATA"),
+                        "entityType", AttributeValue.fromS("FRANCHISE")
+                ))
+                .build()).join();
+        client.putItem(PutItemRequest.builder()
+                .tableName(TABLE)
+                .item(Map.of(
+                        "PK", AttributeValue.fromS("FRANCHISE#fran_topstock"),
+                        "SK", AttributeValue.fromS("STORE#store_A"),
+                        "entityType", AttributeValue.fromS("STORE")
+                ))
+                .build()).join();
+
+        Product productA1 = buildProduct("prod_a1", "store_A", "fran_topstock");
+        Product productA2 = buildProduct("prod_a2", "store_A", "fran_topstock");
+        Product productB1 = buildProduct("prod_b1", "store_B", "fran_topstock");
+        StepVerifier.create(adapter.save(productA1)).expectNextCount(1).verifyComplete();
+        StepVerifier.create(adapter.save(productA2)).expectNextCount(1).verifyComplete();
+        StepVerifier.create(adapter.save(productB1)).expectNextCount(1).verifyComplete();
+
+        StepVerifier.create(adapter.findAllByFranchiseId("fran_topstock").collectList())
+                .assertNext(products -> {
+                    assertThat(products).hasSize(3);
+                    assertThat(products).extracting(Product::getId)
+                            .containsExactlyInAnyOrder("prod_a1", "prod_a2", "prod_b1");
+                    assertThat(products).extracting(Product::getStoreId)
+                            .containsExactlyInAnyOrder("store_A", "store_A", "store_B");
+                })
+                .verifyComplete();
     }
 
     private Product buildProduct(String id, String storeId, String franchiseId) {
