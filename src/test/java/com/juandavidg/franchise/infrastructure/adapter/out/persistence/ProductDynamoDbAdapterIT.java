@@ -1,5 +1,7 @@
 package com.juandavidg.franchise.infrastructure.adapter.out.persistence;
 
+import com.juandavidg.franchise.domain.exception.InsufficientStockException;
+import com.juandavidg.franchise.domain.exception.ProductNotFoundException;
 import com.juandavidg.franchise.domain.model.Product;
 import com.juandavidg.franchise.domain.model.ProductStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -10,6 +12,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
+import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -155,8 +159,73 @@ class ProductDynamoDbAdapterIT {
     @DisplayName("deleteById: debe fallar con ProductNotFoundException cuando el producto no existe")
     void deleteById_shouldFailWithProductNotFoundException_whenProductDoesNotExist() {
         StepVerifier.create(adapter.deleteById("fran_123", "store_789xyz", "prod_does_not_exist"))
-                .expectError(com.juandavidg.franchise.domain.exception.ProductNotFoundException.class)
+                .expectError(ProductNotFoundException.class)
                 .verify();
+    }
+
+    @Test
+    @DisplayName("updateStock: debe aplicar el delta atómicamente sobre el stock existente")
+    void updateStock_shouldApplyDeltaOnExistingStock() {
+        Product product = buildProduct("prod_003", "store_789xyz", "fran_123");
+        StepVerifier.create(adapter.save(product)).expectNextCount(1).verifyComplete();
+
+        StepVerifier.create(adapter.updateStock("fran_123", "store_789xyz", "prod_003", -20))
+                .assertNext(updated -> assertThat(updated.getStock()).isEqualTo(30))
+                .verifyComplete();
+
+        StepVerifier.create(adapter.updateStock("fran_123", "store_789xyz", "prod_003", 5))
+                .assertNext(updated -> assertThat(updated.getStock()).isEqualTo(35))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("updateStock: debe fallar con InsufficientStockException cuando el delta deja el stock negativo")
+    void updateStock_shouldFailWithInsufficientStockException_whenResultWouldBeNegative() {
+        Product product = buildProduct("prod_004", "store_789xyz", "fran_123");
+        StepVerifier.create(adapter.save(product)).expectNextCount(1).verifyComplete();
+
+        StepVerifier.create(adapter.updateStock("fran_123", "store_789xyz", "prod_004", -51))
+                .expectError(InsufficientStockException.class)
+                .verify();
+
+        StepVerifier.create(adapter.updateStock("fran_123", "store_789xyz", "prod_004", 0))
+                .assertNext(updated -> assertThat(updated.getStock()).isEqualTo(50))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("updateStock: debe fallar con ProductNotFoundException cuando el producto no existe")
+    void updateStock_shouldFailWithProductNotFoundException_whenProductDoesNotExist() {
+        StepVerifier.create(adapter.updateStock("fran_123", "store_789xyz", "prod_does_not_exist", -1))
+                .expectError(ProductNotFoundException.class)
+                .verify();
+    }
+
+    @Test
+    @DisplayName("updateStock: 20 decrementos concurrentes de 1 sobre stock=50 deben resultar en exactamente 30, sin actualizaciones perdidas")
+    void updateStock_shouldNotLoseUpdates_underConcurrentDecrements() {
+        Product product = buildProduct("prod_005", "store_789xyz", "fran_123");
+        StepVerifier.create(adapter.save(product)).expectNextCount(1).verifyComplete();
+
+        Flux<Product> concurrentDecrements = Flux.range(0, 20)
+                .flatMap(i -> adapter.updateStock("fran_123", "store_789xyz", "prod_005", -1)
+                        .subscribeOn(Schedulers.parallel()));
+
+        StepVerifier.create(concurrentDecrements)
+                .expectNextCount(20)
+                .verifyComplete();
+
+        Map<String, AttributeValue> item = client.getItem(GetItemRequest.builder()
+                        .tableName(TABLE)
+                        .key(Map.of(
+                                "PK", AttributeValue.fromS("FRANCHISE#fran_123"),
+                                "SK", AttributeValue.fromS("STORE#store_789xyz#PRODUCT#prod_005")
+                        ))
+                        .build())
+                .join()
+                .item();
+
+        assertThat(item.get("stock").n()).isEqualTo("30");
     }
 
     private Product buildProduct(String id, String storeId, String franchiseId) {

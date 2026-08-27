@@ -1,11 +1,13 @@
 package com.juandavidg.franchise.infrastructure.adapter.in.rest;
 
+import com.juandavidg.franchise.domain.exception.InsufficientStockException;
 import com.juandavidg.franchise.domain.exception.ProductNotFoundException;
 import com.juandavidg.franchise.domain.exception.ResourceNotFoundException;
 import com.juandavidg.franchise.domain.model.Product;
 import com.juandavidg.franchise.domain.model.ProductStatus;
 import com.juandavidg.franchise.domain.port.in.CreateProductUseCase;
 import com.juandavidg.franchise.domain.port.in.DeleteProductUseCase;
+import com.juandavidg.franchise.domain.port.in.UpdateProductStockUseCase;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.ProductResponse;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.exception.GlobalExceptionHandler;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.mapper.ProductWebMapper;
@@ -35,6 +37,9 @@ class ProductControllerTest {
     private DeleteProductUseCase deleteProductUseCase;
 
     @Mock
+    private UpdateProductStockUseCase updateProductStockUseCase;
+
+    @Mock
     private ProductWebMapper productWebMapper;
 
     private WebTestClient webTestClient;
@@ -46,7 +51,8 @@ class ProductControllerTest {
 
     @BeforeEach
     void setUp() {
-        ProductController controller = new ProductController(createProductUseCase, deleteProductUseCase, productWebMapper);
+        ProductController controller = new ProductController(
+                createProductUseCase, deleteProductUseCase, updateProductStockUseCase, productWebMapper);
 
         webTestClient = WebTestClient.bindToController(controller)
                 .controllerAdvice(new GlobalExceptionHandler())
@@ -183,5 +189,96 @@ class ProductControllerTest {
                 .expectStatus().isBadRequest()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("MISSING_INPUT");
+    }
+
+    @Test
+    @DisplayName("PATCH stock → 200 con el producto actualizado cuando el delta es válido")
+    void updateStock_shouldReturn200_whenQuantityIsValid() {
+        Product updated = Product.builder()
+                .id("prod_987654321").storeId("store_789xyz").franchiseId("fran_123")
+                .name("Camiseta Deportiva Roja").code("CAM-ROJ-M-01")
+                .price(new BigDecimal("29.99")).description("desc").category("Apparel")
+                .stock(45)
+                .status(ProductStatus.ACTIVE)
+                .createdAt(Instant.parse("2026-08-26T15:30:00Z"))
+                .updatedAt(Instant.parse("2026-08-26T16:00:00Z"))
+                .build();
+        ProductResponse updatedResponse = new ProductResponse(
+                "prod_987654321", "store_789xyz", "Camiseta Deportiva Roja", "CAM-ROJ-M-01",
+                new BigDecimal("29.99"), "desc", "Apparel", 45,
+                "active", "2026-08-26T15:30:00Z", "2026-08-26T16:00:00Z"
+        );
+
+        when(updateProductStockUseCase.execute(any())).thenReturn(Mono.just(updated));
+        when(productWebMapper.toResponse(updated)).thenReturn(updatedResponse);
+
+        webTestClient.patch()
+                .uri(uriBuilder -> uriBuilder.path(URL + "/{productId}/stock")
+                        .queryParam("storeId", "store_789xyz")
+                        .build("prod_987654321"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"quantity": -5}
+                        """)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.stock").isEqualTo(45);
+    }
+
+    @Test
+    @DisplayName("PATCH stock → 409 cuando el delta dejaría el stock en negativo")
+    void updateStock_shouldReturn409_whenStockWouldGoNegative() {
+        when(updateProductStockUseCase.execute(any()))
+                .thenReturn(Mono.error(new InsufficientStockException("store_789xyz", "prod_987654321", -100)));
+
+        webTestClient.patch()
+                .uri(uriBuilder -> uriBuilder.path(URL + "/{productId}/stock")
+                        .queryParam("storeId", "store_789xyz")
+                        .build("prod_987654321"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"quantity": -100}
+                        """)
+                .exchange()
+                .expectStatus().isEqualTo(409)
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("INSUFFICIENT_STOCK");
+    }
+
+    @Test
+    @DisplayName("PATCH stock → 404 cuando el producto no existe en la tienda")
+    void updateStock_shouldReturn404_whenProductDoesNotExist() {
+        when(updateProductStockUseCase.execute(any()))
+                .thenReturn(Mono.error(new ProductNotFoundException("store_789xyz", "prod_999")));
+
+        webTestClient.patch()
+                .uri(uriBuilder -> uriBuilder.path(URL + "/{productId}/stock")
+                        .queryParam("storeId", "store_789xyz")
+                        .build("prod_999"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""
+                        {"quantity": -5}
+                        """)
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("PRODUCT_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("PATCH stock → 400 cuando falta quantity")
+    void updateStock_shouldReturn400_whenQuantityIsMissing() {
+        webTestClient.patch()
+                .uri(uriBuilder -> uriBuilder.path(URL + "/{productId}/stock")
+                        .queryParam("storeId", "store_789xyz")
+                        .build("prod_987654321"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{}")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("VALIDATION_ERROR")
+                .jsonPath("$.errors[0].field").isEqualTo("quantity");
     }
 }

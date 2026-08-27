@@ -1,6 +1,7 @@
 package com.juandavidg.franchise.infrastructure.adapter.in.rest.exception;
 
 import com.juandavidg.franchise.domain.exception.DuplicateResourceException;
+import com.juandavidg.franchise.domain.exception.InsufficientStockException;
 import com.juandavidg.franchise.domain.exception.ProductNotFoundException;
 import com.juandavidg.franchise.domain.exception.ResourceNotFoundException;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.FranchiseController;
@@ -53,6 +54,14 @@ public class GlobalExceptionHandler {
         log.warn("Referenced resource not found: {}", ex.getMessage());
         return ResponseEntity.badRequest().body(new ErrorResponse(
                 400, "REFERENCED_RESOURCE_NOT_FOUND", ex.getMessage(), Instant.now(), errors));
+    }
+
+    @ExceptionHandler(InsufficientStockException.class)
+    public ResponseEntity<ErrorResponse> handleInsufficientStock(InsufficientStockException ex) {
+        List<ErrorDetail> errors = List.of(new ErrorDetail("quantity", ex.getMessage()));
+        log.warn("Insufficient stock: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(
+                409, "INSUFFICIENT_STOCK", ex.getMessage(), Instant.now(), errors));
     }
 
     @ExceptionHandler(ProductNotFoundException.class)
