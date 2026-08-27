@@ -1,7 +1,9 @@
 package com.juandavidg.franchise.infrastructure.adapter.out.persistence;
 
+import com.juandavidg.franchise.domain.exception.InsufficientStockException;
 import com.juandavidg.franchise.domain.exception.ProductNotFoundException;
 import com.juandavidg.franchise.domain.model.Product;
+import com.juandavidg.franchise.domain.model.ProductStatus;
 import com.juandavidg.franchise.domain.port.out.ProductRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,8 +13,13 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
 import software.amazon.awssdk.services.dynamodb.model.DeleteItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Map;
 
 @Repository
@@ -79,6 +86,64 @@ public class ProductDynamoDbAdapter implements ProductRepositoryPort {
                 .then()
                 .onErrorMap(ConditionalCheckFailedException.class,
                         ex -> new ProductNotFoundException(storeId, productId));
+    }
+
+    @Override
+    public Mono<Product> updateStock(String franchiseId, String storeId, String productId, int quantity) {
+        log.debug("Updating stock for product id={} storeId={} quantity={}", productId, storeId, quantity);
+
+        Map<String, AttributeValue> key = Map.of(
+                "PK", s(PREFIX_FRANCHISE + franchiseId),
+                "SK", s(PREFIX_STORE + storeId + INFIX_PRODUCT + productId)
+        );
+
+        UpdateItemRequest request = UpdateItemRequest.builder()
+                .tableName(tableName)
+                .key(key)
+                .updateExpression("ADD stock :qty SET updatedAt = :now")
+                .conditionExpression("attribute_exists(PK) AND stock >= :negQty")
+                .expressionAttributeValues(Map.of(
+                        ":qty",    n(String.valueOf(quantity)),
+                        ":negQty", n(String.valueOf(-quantity)),
+                        ":now",    s(Instant.now().toString())
+                ))
+                .returnValues(ReturnValue.ALL_NEW)
+                .build();
+
+        return Mono.fromFuture(() -> dynamoDbClient.updateItem(request))
+                .map(response -> toDomain(response.attributes()))
+                .onErrorResume(ConditionalCheckFailedException.class,
+                        ex -> resolveUpdateStockFailure(key, storeId, productId, quantity));
+    }
+
+    private Mono<Product> resolveUpdateStockFailure(Map<String, AttributeValue> key, String storeId,
+                                                      String productId, int quantity) {
+        GetItemRequest request = GetItemRequest.builder()
+                .tableName(tableName)
+                .key(key)
+                .build();
+
+        return Mono.fromFuture(() -> dynamoDbClient.getItem(request))
+                .flatMap(response -> response.hasItem() && !response.item().isEmpty()
+                        ? Mono.<Product>error(new InsufficientStockException(storeId, productId, quantity))
+                        : Mono.error(new ProductNotFoundException(storeId, productId)));
+    }
+
+    private Product toDomain(Map<String, AttributeValue> item) {
+        Map<String, AttributeValue> metadata = item.get("metadata").m();
+        return Product.builder()
+                .id(item.get("id").s())
+                .storeId(item.get("storeId").s())
+                .name(metadata.get("name").s())
+                .code(metadata.get("code").s())
+                .price(new BigDecimal(item.get("price").n()))
+                .description(metadata.get("description").s())
+                .category(metadata.get("category").s())
+                .stock(Integer.parseInt(item.get("stock").n()))
+                .status(ProductStatus.valueOf(item.get("status").s().toUpperCase()))
+                .createdAt(Instant.parse(item.get("createdAt").s()))
+                .updatedAt(Instant.parse(item.get("updatedAt").s()))
+                .build();
     }
 
     private static AttributeValue s(String value) {

@@ -8,4 +8,6 @@ public interface ProductRepositoryPort {
     Mono<Product> save(Product product);
 
     Mono<Void> deleteById(String franchiseId, String storeId, String productId);
+
+    Mono<Product> updateStock(String franchiseId, String storeId, String productId, int quantity);
 }

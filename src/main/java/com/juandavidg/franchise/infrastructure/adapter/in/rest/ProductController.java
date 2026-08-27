@@ -2,11 +2,14 @@ package com.juandavidg.franchise.infrastructure.adapter.in.rest;
 
 import com.juandavidg.franchise.domain.model.command.CreateProductCommand;
 import com.juandavidg.franchise.domain.model.command.DeleteProductCommand;
+import com.juandavidg.franchise.domain.model.command.UpdateProductStockCommand;
 import com.juandavidg.franchise.domain.port.in.CreateProductUseCase;
 import com.juandavidg.franchise.domain.port.in.DeleteProductUseCase;
+import com.juandavidg.franchise.domain.port.in.UpdateProductStockUseCase;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.CreateProductRequest;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.ErrorResponse;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.ProductResponse;
+import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.UpdateProductStockRequest;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.mapper.ProductWebMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -21,6 +24,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -38,6 +42,7 @@ public class ProductController {
 
     private final CreateProductUseCase createProductUseCase;
     private final DeleteProductUseCase deleteProductUseCase;
+    private final UpdateProductStockUseCase updateProductStockUseCase;
     private final ProductWebMapper productWebMapper;
 
     @Operation(
@@ -90,5 +95,36 @@ public class ProductController {
                 .then(Mono.just(ResponseEntity.noContent().<Void>build()))
                 .doOnNext(response -> log.info("Product deletion request completed with status={}", response.getStatusCode()))
                 .doOnError(ex -> log.error("Product deletion request failed for productId={} storeId={}", productId, storeId, ex));
+    }
+
+    @Operation(
+            summary = "Update product stock",
+            description = "Applies a signed delta (positive to restock, negative to consume) to a product's stock atomically."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Stock updated successfully",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ProductResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Product does not exist in the given store",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "The requested delta would leave the stock negative",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PatchMapping("/{productId}/stock")
+    public Mono<ResponseEntity<ProductResponse>> updateStock(@PathVariable String productId,
+                                                               @RequestParam String storeId,
+                                                               @Valid @RequestBody UpdateProductStockRequest request) {
+
+        log.info("Received update stock request for productId={} storeId={} quantity={}",
+                productId, storeId, request.quantity());
+
+        UpdateProductStockCommand command = new UpdateProductStockCommand(storeId, productId, request.quantity());
+
+        return updateProductStockUseCase.execute(command)
+                .map(product -> ResponseEntity.ok(productWebMapper.toResponse(product)))
+                .doOnNext(response -> log.info("Stock update request completed with status={}", response.getStatusCode()))
+                .doOnError(ex -> log.error("Stock update request failed for productId={} storeId={}", productId, storeId, ex));
     }
 }
