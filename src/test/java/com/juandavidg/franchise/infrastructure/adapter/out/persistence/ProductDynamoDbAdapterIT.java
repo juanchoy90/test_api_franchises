@@ -1,7 +1,7 @@
 package com.juandavidg.franchise.infrastructure.adapter.out.persistence;
 
-import com.juandavidg.franchise.domain.model.Store;
-import com.juandavidg.franchise.domain.model.StoreStatus;
+import com.juandavidg.franchise.domain.model.Product;
+import com.juandavidg.franchise.domain.model.ProductStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +27,7 @@ import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +35,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
-class StoreDynamoDbAdapterIT {
+class ProductDynamoDbAdapterIT {
 
     static final String TABLE = "franchise-management";
 
@@ -44,7 +45,7 @@ class StoreDynamoDbAdapterIT {
             .withServices("dynamodb");
 
     static DynamoDbAsyncClient client;
-    static StoreDynamoDbAdapter adapter;
+    static ProductDynamoDbAdapter adapter;
 
     @BeforeAll
     static void setUpAll() {
@@ -68,7 +69,7 @@ class StoreDynamoDbAdapterIT {
                 .billingMode(BillingMode.PAY_PER_REQUEST)
                 .build()).join();
 
-        adapter = new StoreDynamoDbAdapter(client, TABLE);
+        adapter = new ProductDynamoDbAdapter(client, TABLE);
     }
 
     @AfterEach
@@ -94,15 +95,15 @@ class StoreDynamoDbAdapterIT {
     }
 
     @Test
-    @DisplayName("save: debe persistir la sucursal con PK=FRANCHISE#{franchiseId} y SK=STORE#{id}")
-    void save_shouldPersistStoreUnderFranchisePartition() {
-        Store store = buildStore("store_001", "fran_123");
+    @DisplayName("save: debe persistir el producto con PK=FRANCHISE#{franchiseId} y SK=STORE#{storeId}#PRODUCT#{id}")
+    void save_shouldPersistProductUnderStorePartition() {
+        Product product = buildProduct("prod_001", "store_789xyz", "fran_123");
 
-        StepVerifier.create(adapter.save(store))
+        StepVerifier.create(adapter.save(product))
                 .assertNext(saved -> {
-                    assertThat(saved.getId()).isEqualTo("store_001");
-                    assertThat(saved.getFranchiseId()).isEqualTo("fran_123");
-                    assertThat(saved.getStatus()).isEqualTo(StoreStatus.ACTIVE);
+                    assertThat(saved.getId()).isEqualTo("prod_001");
+                    assertThat(saved.getStoreId()).isEqualTo("store_789xyz");
+                    assertThat(saved.getStatus()).isEqualTo(ProductStatus.ACTIVE);
                 })
                 .verifyComplete();
 
@@ -110,68 +111,33 @@ class StoreDynamoDbAdapterIT {
                         .tableName(TABLE)
                         .key(Map.of(
                                 "PK", AttributeValue.fromS("FRANCHISE#fran_123"),
-                                "SK", AttributeValue.fromS("STORE#store_001")
+                                "SK", AttributeValue.fromS("STORE#store_789xyz#PRODUCT#prod_001")
                         ))
                         .build())
                 .join()
                 .item();
 
-        assertThat(item.get("entityType").s()).isEqualTo("STORE");
-        assertThat(item.get("id").s()).isEqualTo("store_001");
-        assertThat(item.get("franchiseId").s()).isEqualTo("fran_123");
+        assertThat(item.get("entityType").s()).isEqualTo("PRODUCT");
+        assertThat(item.get("id").s()).isEqualTo("prod_001");
+        assertThat(item.get("storeId").s()).isEqualTo("store_789xyz");
         assertThat(item.get("status").s()).isEqualTo("active");
-        assertThat(item.get("metadata").m().get("name").s()).isEqualTo("Sucursal Norte");
-        assertThat(item.get("metadata").m().get("address").s()).isEqualTo("Cra 7 # 45-12");
-        assertThat(item.get("metadata").m().get("city").s()).isEqualTo("Bogotá");
-        assertThat(item.get("metadata").m().get("phone").s()).isEqualTo("6011234567");
+        assertThat(item.get("price").n()).isEqualTo("29.99");
+        assertThat(item.get("stock").n()).isEqualTo("50");
+        assertThat(item.get("metadata").m().get("name").s()).isEqualTo("Camiseta Deportiva Roja");
+        assertThat(item.get("metadata").m().get("code").s()).isEqualTo("CAM-ROJ-M-01");
+        assertThat(item.get("metadata").m().get("description").s()).isEqualTo("Camiseta para correr transpirable talla M");
+        assertThat(item.get("metadata").m().get("category").s()).isEqualTo("Apparel");
     }
 
-    @Test
-    @DisplayName("save: debe persistir también el ítem puntero PK=STORE#{id} | SK=METADATA con franchiseId")
-    void save_shouldPersistLookupItemForReverseFranchiseLookup() {
-        Store store = buildStore("store_002", "fran_456");
-
-        StepVerifier.create(adapter.save(store)).expectNextCount(1).verifyComplete();
-
-        Map<String, AttributeValue> lookupItem = client.getItem(GetItemRequest.builder()
-                        .tableName(TABLE)
-                        .key(Map.of(
-                                "PK", AttributeValue.fromS("STORE#store_002"),
-                                "SK", AttributeValue.fromS("METADATA")
-                        ))
-                        .build())
-                .join()
-                .item();
-
-        assertThat(lookupItem.get("franchiseId").s()).isEqualTo("fran_456");
-    }
-
-    @Test
-    @DisplayName("findFranchiseIdByStoreId: debe retornar el franchiseId cuando la tienda existe")
-    void findFranchiseIdByStoreId_shouldReturnFranchiseId_whenStoreExists() {
-        Store store = buildStore("store_003", "fran_789");
-
-        StepVerifier.create(adapter.save(store)).expectNextCount(1).verifyComplete();
-
-        StepVerifier.create(adapter.findFranchiseIdByStoreId("store_003"))
-                .expectNext("fran_789")
-                .verifyComplete();
-    }
-
-    @Test
-    @DisplayName("findFranchiseIdByStoreId: debe retornar Mono vacío cuando la tienda no existe")
-    void findFranchiseIdByStoreId_shouldReturnEmpty_whenStoreDoesNotExist() {
-        StepVerifier.create(adapter.findFranchiseIdByStoreId("store_does_not_exist"))
-                .verifyComplete();
-    }
-
-    private Store buildStore(String id, String franchiseId) {
+    private Product buildProduct(String id, String storeId, String franchiseId) {
         Instant now = Instant.now();
-        return Store.builder()
-                .id(id).franchiseId(franchiseId)
-                .name("Sucursal Norte").address("Cra 7 # 45-12")
-                .city("Bogotá").phone("6011234567")
-                .status(StoreStatus.ACTIVE)
+        return Product.builder()
+                .id(id).storeId(storeId).franchiseId(franchiseId)
+                .name("Camiseta Deportiva Roja").code("CAM-ROJ-M-01")
+                .price(new BigDecimal("29.99"))
+                .description("Camiseta para correr transpirable talla M")
+                .category("Apparel").stock(50)
+                .status(ProductStatus.ACTIVE)
                 .createdAt(now).updatedAt(now)
                 .build();
     }

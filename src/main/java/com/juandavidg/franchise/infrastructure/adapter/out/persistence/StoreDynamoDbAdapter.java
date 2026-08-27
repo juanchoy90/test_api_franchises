@@ -8,7 +8,10 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
-import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.Put;
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItem;
+import software.amazon.awssdk.services.dynamodb.model.TransactWriteItemsRequest;
 
 import java.util.Map;
 
@@ -18,6 +21,7 @@ public class StoreDynamoDbAdapter implements StoreRepositoryPort {
 
     private static final String PREFIX_FRANCHISE = "FRANCHISE#";
     private static final String PREFIX_STORE = "STORE#";
+    private static final String SK_METADATA = "METADATA";
 
     private final DynamoDbAsyncClient dynamoDbClient;
     private final String tableName;
@@ -32,7 +36,38 @@ public class StoreDynamoDbAdapter implements StoreRepositoryPort {
     public Mono<Store> save(Store store) {
         log.debug("Saving store item to DynamoDB, id={} franchiseId={}", store.getId(), store.getFranchiseId());
 
-        PutItemRequest request = PutItemRequest.builder()
+        TransactWriteItemsRequest request = TransactWriteItemsRequest.builder()
+                .transactItems(
+                        TransactWriteItem.builder().put(mainItem(store)).build(),
+                        TransactWriteItem.builder().put(lookupItem(store)).build()
+                )
+                .build();
+
+        return Mono.fromFuture(() -> dynamoDbClient.transactWriteItems(request))
+                .thenReturn(store);
+    }
+
+    @Override
+    public Mono<String> findFranchiseIdByStoreId(String storeId) {
+        log.debug("Looking up franchiseId for storeId={} in DynamoDB", storeId);
+
+        GetItemRequest request = GetItemRequest.builder()
+                .tableName(tableName)
+                .key(Map.of(
+                        "PK", s(PREFIX_STORE + storeId),
+                        "SK", s(SK_METADATA)
+                ))
+                .projectionExpression("franchiseId")
+                .build();
+
+        return Mono.fromFuture(() -> dynamoDbClient.getItem(request))
+                .flatMap(response -> response.hasItem() && !response.item().isEmpty()
+                        ? Mono.just(response.item().get("franchiseId").s())
+                        : Mono.empty());
+    }
+
+    private Put mainItem(Store store) {
+        return Put.builder()
                 .tableName(tableName)
                 .item(Map.of(
                         "PK",         s(PREFIX_FRANCHISE + store.getFranchiseId()),
@@ -51,9 +86,18 @@ public class StoreDynamoDbAdapter implements StoreRepositoryPort {
                         ))
                 ))
                 .build();
+    }
 
-        return Mono.fromFuture(() -> dynamoDbClient.putItem(request))
-                .thenReturn(store);
+    private Put lookupItem(Store store) {
+        return Put.builder()
+                .tableName(tableName)
+                .item(Map.of(
+                        "PK",          s(PREFIX_STORE + store.getId()),
+                        "SK",          s(SK_METADATA),
+                        "entityType",  s("STORE_LOOKUP"),
+                        "franchiseId", s(store.getFranchiseId())
+                ))
+                .build();
     }
 
     private static AttributeValue s(String value) {
