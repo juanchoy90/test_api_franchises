@@ -1,5 +1,6 @@
 package com.juandavidg.franchise.infrastructure.adapter.in.rest;
 
+import com.juandavidg.franchise.domain.exception.FranchiseNotFoundException;
 import com.juandavidg.franchise.domain.exception.InsufficientStockException;
 import com.juandavidg.franchise.domain.exception.ProductNotFoundException;
 import com.juandavidg.franchise.domain.exception.ResourceNotFoundException;
@@ -7,6 +8,7 @@ import com.juandavidg.franchise.domain.model.Product;
 import com.juandavidg.franchise.domain.model.ProductStatus;
 import com.juandavidg.franchise.domain.port.in.CreateProductUseCase;
 import com.juandavidg.franchise.domain.port.in.DeleteProductUseCase;
+import com.juandavidg.franchise.domain.port.in.GetTopStockProductsPerStoreUseCase;
 import com.juandavidg.franchise.domain.port.in.UpdateProductStockUseCase;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.dto.ProductResponse;
 import com.juandavidg.franchise.infrastructure.adapter.in.rest.exception.GlobalExceptionHandler;
@@ -19,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
@@ -40,6 +43,9 @@ class ProductControllerTest {
     private UpdateProductStockUseCase updateProductStockUseCase;
 
     @Mock
+    private GetTopStockProductsPerStoreUseCase getTopStockProductsPerStoreUseCase;
+
+    @Mock
     private ProductWebMapper productWebMapper;
 
     private WebTestClient webTestClient;
@@ -52,7 +58,8 @@ class ProductControllerTest {
     @BeforeEach
     void setUp() {
         ProductController controller = new ProductController(
-                createProductUseCase, deleteProductUseCase, updateProductStockUseCase, productWebMapper);
+                createProductUseCase, deleteProductUseCase, updateProductStockUseCase,
+                getTopStockProductsPerStoreUseCase, productWebMapper);
 
         webTestClient = WebTestClient.bindToController(controller)
                 .controllerAdvice(new GlobalExceptionHandler())
@@ -280,5 +287,66 @@ class ProductControllerTest {
                 .expectBody()
                 .jsonPath("$.code").isEqualTo("VALIDATION_ERROR")
                 .jsonPath("$.errors[0].field").isEqualTo("quantity");
+    }
+
+    @Test
+    @DisplayName("GET top-stock → 200 con un producto por sucursal")
+    void getTopStockPerStore_shouldReturn200WithOneProductPerStore() {
+        Product productStoreA = Product.builder()
+                .id("prod_a1").storeId("store_A").franchiseId("fran_123")
+                .name("Producto A").code("CODE-A")
+                .price(new BigDecimal("10.00")).description("desc").category("cat")
+                .stock(40).status(ProductStatus.ACTIVE)
+                .createdAt(Instant.parse("2026-08-26T15:30:00Z"))
+                .updatedAt(Instant.parse("2026-08-26T15:30:00Z"))
+                .build();
+        ProductResponse responseA = new ProductResponse(
+                "prod_a1", "store_A", "Producto A", "CODE-A",
+                new BigDecimal("10.00"), "desc", "cat", 40,
+                "active", "2026-08-26T15:30:00Z", "2026-08-26T15:30:00Z"
+        );
+
+        when(getTopStockProductsPerStoreUseCase.execute("fran_123")).thenReturn(Flux.just(productStoreA));
+        when(productWebMapper.toResponse(productStoreA)).thenReturn(responseA);
+
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder.path(URL + "/top-stock")
+                        .queryParam("franchiseId", "fran_123")
+                        .build())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.length()").isEqualTo(1)
+                .jsonPath("$[0].storeId").isEqualTo("store_A")
+                .jsonPath("$[0].id").isEqualTo("prod_a1")
+                .jsonPath("$[0].stock").isEqualTo(40);
+    }
+
+    @Test
+    @DisplayName("GET top-stock → 404 cuando la franquicia no existe")
+    void getTopStockPerStore_shouldReturn404_whenFranchiseDoesNotExist() {
+        when(getTopStockProductsPerStoreUseCase.execute("fran_999"))
+                .thenReturn(Flux.error(new FranchiseNotFoundException("fran_999")));
+
+        webTestClient.get()
+                .uri(uriBuilder -> uriBuilder.path(URL + "/top-stock")
+                        .queryParam("franchiseId", "fran_999")
+                        .build())
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("FRANCHISE_NOT_FOUND")
+                .jsonPath("$.errors[0].field").isEqualTo("franchiseId");
+    }
+
+    @Test
+    @DisplayName("GET top-stock → 400 cuando falta el query param franchiseId")
+    void getTopStockPerStore_shouldReturn400_whenFranchiseIdQueryParamIsMissing() {
+        webTestClient.get()
+                .uri(URL + "/top-stock")
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo("MISSING_INPUT");
     }
 }

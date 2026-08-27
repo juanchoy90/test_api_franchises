@@ -13,7 +13,7 @@
 
   <groupId>com.juandavidg</groupId>
   <artifactId>franchise-api</artifactId>
-  <version>1.0.4</version>
+  <version>1.0.5</version>
   <name>franchise-api</name>
   <description>Reactive API for franchise/branch/product management</description>
 
